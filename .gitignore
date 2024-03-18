@@ -1,3 +1,7 @@
+wcc
+
+.DS_Store
+.cache
 # Prerequisites
 *.d
 
