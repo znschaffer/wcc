@@ -1,66 +1,109 @@
-#include <err.h>
-#include <fcntl.h>
-#include <stdio.h>
 #include <unistd.h>
-#include <zip.h>
+#include <stdio.h>
+#include <stdlib.h>
 
-int main(int argc, char *argv[]) {
-  int bytes = 0;
-  int words = 0;
-  int lines = 0;
-  char buffer[1];
-  enum states { WHITESPACE, WORD };
-  int state;
+extern char *__progname;
 
-  zip_t *zt = zip_open("./test.zip", ZIP_CREATE, NULL);
-  zip_file_add(zt, "myfile.txt",
-               zip_source_buffer(zt, "test text in here",
-                                 sizeof("test text in here"), 0),
-               ZIP_FL_ENC_UTF_8);
-  zip_close(zt);
+static void usage(void);
 
-  if (argc < 2) {
-    printf("usage: wcc file.txt\n");
-    return 1;
-  }
+enum states { WHITESPACE, WORD };
 
-  int file = open(argv[1], O_RDONLY);
-  if (file == -1) {
-    printf("can not find '%s'\n", argv[1]);
-    return 1;
-  } else {
-    while (read(file, buffer, 1) == 1) {
-      bytes++;
-      if (buffer[0] == ' ' || buffer[0] == '\t') {
-        state = WHITESPACE;
-      } else if (buffer[0] == '\n') {
-        lines++;
-        state = WHITESPACE;
-      } else {
-        if (state == WHITESPACE) {
-          words++;
-        }
-        state = WORD;
-      }
-    }
+int main(int argc, char *argv[])
+{
+	int opt, exitval, c;
+	int count = 0;
+	int total_lines = 0;
+	int total_words = 0;
+	int total_bytes = 0;
+	enum states state;
 
-    if (argc == 3 && argv[2][0] == '-') {
-      switch (argv[2][1]) {
-        case 'l':
-          printf("%8d %s\n", lines, argv[1]);
-          break;
-        case 'w':
-          printf("%8d %s\n", words, argv[1]);
-          break;
-        case 'c':
-          printf("%8d %s\n", bytes, argv[1]);
-          break;
-        default:
-          printf("unknown flag '%s'\n", argv[2]);
-          break;
-      }
-    } else {
-      printf("%8d%8d%8d %s\n", lines, words, bytes, argv[1]);
-    }
-  }
+	int lflag = 0;
+	int wflag = 0;
+	int cflag = 0;
+
+	while ((opt = getopt(argc, argv, "lwc")) != -1) {
+		switch (opt) {
+		case 'l':
+			lflag = 1;
+			break;
+		case 'w':
+			wflag = 1;
+			break;
+		case 'c':
+			cflag = 1;
+			break;
+		default:
+			usage();
+		}
+	}
+
+	argc -= optind;
+	argv += optind;
+
+	if (*argv == NULL)
+		usage();
+
+	for (exitval = 0; *argv != NULL; ++argv) {
+		count++;
+		int bytes = 0;
+		int words = 0;
+		int lines = 0;
+
+		FILE *f = fopen(*argv, "r");
+		if (f == NULL) {
+			perror("fopen");
+			exit(1);
+		}
+
+		while ((c = fgetc(f)) != EOF) {
+			if (c == ' ' || c == '\t') {
+				state = WHITESPACE;
+			} else if (c == '\n') {
+				lines++;
+				state = WHITESPACE;
+			} else {
+				if (state == WHITESPACE) {
+					words++;
+				}
+				state = WORD;
+			}
+			bytes++;
+		}
+
+		if (lflag) {
+			fprintf(stdout, "%8d %s\n", lines, *argv);
+		} else if (wflag) {
+			fprintf(stdout, "%8d %s\n", words, *argv);
+		} else if (cflag) {
+			fprintf(stdout, "%8d %s\n", bytes, *argv);
+		} else {
+			fprintf(stdout, "%8d%8d%8d %s\n", lines, words, bytes,
+				*argv);
+		}
+
+		total_bytes += bytes;
+		total_lines += lines;
+		total_words += words;
+	}
+
+	if (count > 1) {
+		if (lflag) {
+			fprintf(stdout, "%8d total\n", total_lines);
+		} else if (wflag) {
+			fprintf(stdout, "%8d total\n", total_words);
+		} else if (cflag) {
+			fprintf(stdout, "%8d total\n", total_bytes);
+		} else {
+			fprintf(stdout, "%8d%8d%8d total\n", total_lines,
+				total_words, total_bytes);
+		}
+	}
+
+	return exitval;
+}
+
+static void usage(void)
+{
+	fprintf(stderr, "usage: %s [-lcw] [file ...]\n", __progname);
+	exit(1);
 }
